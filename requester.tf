@@ -28,10 +28,10 @@ variable "requester_allow_remote_vpc_dns_resolution" {
 # Requestors's credentials
 provider "aws" {
   alias  = "requester"
-  region = "${var.requester_region}"
+  region = var.requester_region
 
   assume_role {
-    role_arn = "${var.requester_aws_assume_role_arn}"
+    role_arn = var.requester_aws_assume_role_arn
   }
 }
 
@@ -42,38 +42,38 @@ locals {
 
 module "requester" {
   source     = "git::https://github.com/cloudposse/terraform-null-label.git?ref=tags/0.3.3"
-  enabled    = "${var.enabled}"
-  namespace  = "${var.namespace}"
-  name       = "${var.name}"
-  stage      = "${var.stage}"
-  delimiter  = "${var.delimiter}"
-  attributes = "${local.requester_attributes}"
-  tags       = "${local.requester_tags}"
+  enabled    = var.enabled
+  namespace  = var.namespace
+  name       = var.name
+  stage      = var.stage
+  delimiter  = var.delimiter
+  attributes = local.requester_attributes
+  tags       = local.requester_tags
 }
 
 data "aws_caller_identity" "requester" {
-  count    = "${local.count}"
+  count    = local.count
   provider = "aws.requester"
 }
 
 data "aws_region" "requester" {
-  count    = "${local.count}"
+  count    = local.count
   provider = "aws.requester"
 }
 
 # Lookup requester VPC so that we can reference the CIDR
 data "aws_vpc" "requester" {
-  count    = "${local.count}"
+  count    = local.count
   provider = "aws.requester"
-  id       = "${var.requester_vpc_id}"
-  tags     = "${var.requester_vpc_tags}"
+  id       = var.requester_vpc_id
+  tags     = var.requester_vpc_tags
 }
 
 # Lookup requester subnets
 data "aws_subnet_ids" "requester" {
-  count    = "${local.count}"
+  count    = local.count
   provider = "aws.requester"
-  vpc_id   = "${local.requester_vpc_id}"
+  vpc_id   = local.requester_vpc_id
 }
 
 locals {
@@ -84,21 +84,21 @@ locals {
 
 # Lookup requester route tables
 data "aws_route_table" "requester" {
-  count     = "${local.enabled ? local.requester_subnet_ids_count : 0}"
+  count     = local.enabled ? local.requester_subnet_ids_count : 0
   provider  = "aws.requester"
-  subnet_id = "${element(local.requester_subnet_ids, count.index)}"
+  subnet_id = element(local.requester_subnet_ids, count.index)
 }
 
 resource "aws_vpc_peering_connection" "requester" {
-  count         = "${local.count}"
+  count         = local.count
   provider      = "aws.requester"
-  vpc_id        = "${local.requester_vpc_id}"
-  peer_vpc_id   = "${local.accepter_vpc_id}"
-  peer_owner_id = "${local.accepter_account_id}"
-  peer_region   = "${local.accepter_region}"
+  vpc_id        = local.requester_vpc_id
+  peer_vpc_id   = local.accepter_vpc_id
+  peer_owner_id = local.accepter_account_id
+  peer_region   = local.accepter_region
   auto_accept   = false
 
-  tags = "${module.requester.tags}"
+  tags = module.requester.tags
 }
 
 resource "aws_vpc_peering_connection_options" "requester" {
@@ -109,7 +109,7 @@ resource "aws_vpc_peering_connection_options" "requester" {
   vpc_peering_connection_id = "${join("", aws_vpc_peering_connection.requester.*.id)}"
 
   requester {
-    allow_remote_vpc_dns_resolution = "${var.requester_allow_remote_vpc_dns_resolution}"
+    allow_remote_vpc_dns_resolution = var.requester_allow_remote_vpc_dns_resolution
   }
 }
 
@@ -122,7 +122,7 @@ locals {
 
 # Create routes from requester to accepter
 resource "aws_route" "requester" {
-  count                     = "${local.enabled ? local.requester_aws_route_table_ids_count * local.accepter_cidr_block_associations_count : 0}"
+  count                     = local.enabled ? local.requester_aws_route_table_ids_count * local.accepter_cidr_block_associations_count : 0
   provider                  = "aws.requester"
   route_table_id            = "${element(local.requester_aws_route_table_ids, ceil(count.index/local.accepter_cidr_block_associations_count))}"
   destination_cidr_block    = "${lookup(local.accepter_cidr_block_associations[count.index % local.accepter_cidr_block_associations_count], "cidr_block")}"
@@ -131,11 +131,11 @@ resource "aws_route" "requester" {
 }
 
 output "requester_connection_id" {
-  value       = "${join("", aws_vpc_peering_connection.requester.*.id)}"
+  value       = join("", aws_vpc_peering_connection.requester.*.id)
   description = "Requester VPC peering connection ID"
 }
 
 output "requester_accept_status" {
-  value       = "${join("", aws_vpc_peering_connection.requester.*.accept_status)}"
+  value       = join("", aws_vpc_peering_connection.requester.*.accept_status)
   description = "Requester VPC peering connection request status"
 }
